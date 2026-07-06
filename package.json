@@ -1,0 +1,24 @@
+{
+  "name": "mcp-features",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev Container Features that expose Model Context Protocol (MCP) servers for code intelligence (LSP) and repo knowledge (Orama).",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "packageManager": "bun@1.2.18",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0"
+  }
+}

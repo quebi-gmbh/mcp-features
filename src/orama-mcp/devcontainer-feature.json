@@ -1,0 +1,29 @@
+{
+  "id": "orama-mcp",
+  "version": "0.1.0",
+  "name": "Orama MCP (repo knowledge search)",
+  "description": "Installs a stdio MCP server that indexes Markdown and JSONL files in the workspace with Orama (in-memory hybrid BM25 + vector search) and exposes them to MCP clients such as Claude Code.",
+  "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/orama-mcp",
+  "licenseURL": "https://github.com/quebi-gmbh/mcp-features/blob/main/LICENSE",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "latest",
+      "description": "Version of @quebi/orama-mcp to install."
+    },
+    "globs": {
+      "type": "string",
+      "default": "**/*.md,**/*.jsonl",
+      "description": "Comma-separated globs of files to index."
+    },
+    "autoRegister": {
+      "type": "boolean",
+      "default": true,
+      "description": "Merge an entry into the workspace .mcp.json so MCP clients auto-discover the server. Set false if claude-manager (or another tool) owns .mcp.json."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ],
+  "postCreateCommand": "orama-mcp-register"
+}

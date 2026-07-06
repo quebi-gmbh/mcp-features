@@ -1,0 +1,29 @@
+{
+  "name": "@quebi/orama-mcp",
+  "version": "0.0.0",
+  "description": "stdio MCP server that indexes Markdown and JSONL files in the workspace with Orama (in-memory hybrid search).",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "orama-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist --target node --format esm",
+    "start": "bun run ./src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "@orama/orama": "^3.0.0",
+    "chokidar": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

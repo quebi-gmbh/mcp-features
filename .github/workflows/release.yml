@@ -1,0 +1,28 @@
+name: Release (publish features)
+
+# Publishes the Dev Container Features under src/* as OCI artifacts to
+# ghcr.io/quebi-gmbh/mcp-features/<feature-id>. Bump each feature's version in
+# its devcontainer-feature.json before pushing.
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish Dev Container Features
+        uses: devcontainers/action@v1
+        with:
+          publish-features: "true"
+          base-path-to-features: "./src"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,18 @@
+# deps
+node_modules/
+bun.lockb
+
+# build output
+dist/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# derived embedding cache (see packages/orama-mcp)
+.orama-cache/
+
+# misc
+.DS_Store
+*.log
+coverage/

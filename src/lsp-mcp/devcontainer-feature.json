@@ -1,0 +1,37 @@
+{
+  "id": "lsp-mcp",
+  "version": "0.1.0",
+  "name": "LSP MCP (code intelligence)",
+  "description": "Installs language servers (TypeScript, Python) and a Bun-based HTTP MCP service that exposes LSP-backed code intelligence (definitions, references, hover, diagnostics, symbols) to MCP clients such as Claude Code.",
+  "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/lsp-mcp",
+  "licenseURL": "https://github.com/quebi-gmbh/mcp-features/blob/main/LICENSE",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "latest",
+      "description": "Version of @quebi/lsp-mcp to install."
+    },
+    "languages": {
+      "type": "string",
+      "default": "typescript,python",
+      "description": "Comma-separated languages to enable. Supported: typescript, python."
+    },
+    "port": {
+      "type": "string",
+      "default": "7337",
+      "description": "Port for the HTTP MCP service."
+    },
+    "autoRegister": {
+      "type": "boolean",
+      "default": true,
+      "description": "Merge an entry into the workspace .mcp.json so MCP clients auto-discover the server. Set false if claude-manager (or another tool) owns .mcp.json."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils",
+    "ghcr.io/devcontainers/features/node",
+    "ghcr.io/devcontainers/features/python"
+  ],
+  "postCreateCommand": "lsp-mcp-register",
+  "postStartCommand": "nohup lsp-mcp serve >/tmp/lsp-mcp.log 2>&1 &"
+}
