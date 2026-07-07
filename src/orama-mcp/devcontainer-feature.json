@@ -9,7 +9,7 @@
     "version": {
       "type": "string",
       "default": "latest",
-      "description": "Version of @quebi/orama-mcp to install."
+      "description": "Git ref (branch, tag, or commit) of quebi-gmbh/mcp-features to build packages/orama-mcp from. 'latest' resolves to 'main'."
     },
     "globs": {
       "type": "string",
