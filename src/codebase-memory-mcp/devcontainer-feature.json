@@ -1,0 +1,34 @@
+{
+  "id": "codebase-memory-mcp",
+  "version": "0.1.0",
+  "name": "Codebase Memory MCP (repo-scale structural graph)",
+  "description": "Installs codebase-memory-mcp (https://github.com/DeusData/codebase-memory-mcp), a single static binary that indexes the workspace into a persistent knowledge graph and exposes it as a stdio MCP server: architecture overview, call-graph traversal, dead-code detection, HTTP/gRPC cross-service linking, git-diff impact analysis, and Cypher-like graph queries.",
+  "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/codebase-memory-mcp",
+  "licenseURL": "https://github.com/quebi-gmbh/mcp-features/blob/main/LICENSE",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "latest",
+      "description": "Release tag of codebase-memory-mcp to install (e.g. 'v0.8.0'), or 'latest'."
+    },
+    "ui": {
+      "type": "boolean",
+      "default": false,
+      "description": "Install the UI variant, which adds an optional 3D graph-visualization web UI (localhost:9749)."
+    },
+    "autoIndex": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable auto-indexing new projects on first MCP session connection (config: auto_index)."
+    },
+    "autoRegister": {
+      "type": "boolean",
+      "default": true,
+      "description": "Merge an entry into the workspace .mcp.json so MCP clients auto-discover the server. Set false if claude-manager (or another tool) owns .mcp.json."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ],
+  "postCreateCommand": "codebase-memory-mcp-register"
+}
