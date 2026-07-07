@@ -149,6 +149,13 @@ Features are published as OCI artifacts to `ghcr.io/quebi-gmbh/mcp-features/<fea
 [`devcontainers/action`](https://github.com/devcontainers/action)). Bump the `version` in each
 feature's `devcontainer-feature.json` and push to `main`.
 
+> **This is easy to forget, and the publish step won't tell you.** It's idempotent and
+> version-gated: if `version` is unchanged, it silently skips that feature (logging
+> `Version X already exists, skipping` — not a failure, so CI stays green) and the registry keeps
+> serving whatever was last published under that version. Any PR that changes a feature's behavior
+> — `install.sh`, or the package it installs — must also bump that feature's `version`, or the
+> change never reaches `ghcr.io` despite tests passing.
+
 ---
 
 ## Status
