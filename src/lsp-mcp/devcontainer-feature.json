@@ -1,6 +1,6 @@
 {
   "id": "lsp-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "LSP MCP (code intelligence, via Serena)",
   "description": "Installs Serena (https://github.com/oraios/serena) and runs it as a long-lived HTTP MCP service, giving MCP clients such as Claude Code semantic code intelligence (find symbol, references, hover, diagnostics, LSP-backed rename) backed by real language servers.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/lsp-mcp",

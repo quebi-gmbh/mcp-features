@@ -1,6 +1,6 @@
 {
   "id": "orama-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "Orama MCP (repo knowledge search)",
   "description": "Installs a stdio MCP server that indexes Markdown and JSONL files in the workspace with Orama (in-memory hybrid BM25 + vector search) and exposes them to MCP clients such as Claude Code.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/orama-mcp",
