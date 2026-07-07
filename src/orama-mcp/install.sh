@@ -36,7 +36,7 @@ fi
 #    regardless of which user the container runs as at runtime.
 if ! command -v bun >/dev/null 2>&1; then
   echo "[orama-mcp] installing bun..."
-  BUN_INSTALL=/usr/local curl -fsSL https://bun.sh/install | bash
+  curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
 fi
 
 # 4. Fetch just packages/orama-mcp from this repo (not published to npm yet) via a
