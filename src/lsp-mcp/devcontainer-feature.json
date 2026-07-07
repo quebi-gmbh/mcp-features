@@ -1,25 +1,30 @@
 {
   "id": "lsp-mcp",
   "version": "0.1.0",
-  "name": "LSP MCP (code intelligence)",
-  "description": "Installs language servers (TypeScript, Python) and a Bun-based HTTP MCP service that exposes LSP-backed code intelligence (definitions, references, hover, diagnostics, symbols) to MCP clients such as Claude Code.",
+  "name": "LSP MCP (code intelligence, via Serena)",
+  "description": "Installs Serena (https://github.com/oraios/serena) and runs it as a long-lived HTTP MCP service, giving MCP clients such as Claude Code semantic code intelligence (find symbol, references, hover, diagnostics, LSP-backed rename) backed by real language servers.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/lsp-mcp",
   "licenseURL": "https://github.com/quebi-gmbh/mcp-features/blob/main/LICENSE",
   "options": {
     "version": {
       "type": "string",
       "default": "latest",
-      "description": "Version of @quebi/lsp-mcp to install."
+      "description": "Version of the serena-agent PyPI package to install."
     },
-    "languages": {
+    "pythonVersion": {
       "type": "string",
-      "default": "typescript,python",
-      "description": "Comma-separated languages to enable. Supported: typescript, python."
+      "default": "3.13",
+      "description": "Python version uv provisions to run Serena."
     },
     "port": {
       "type": "string",
       "default": "7337",
       "description": "Port for the HTTP MCP service."
+    },
+    "enableWebDashboard": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable Serena's web dashboard. Off by default in a headless container."
     },
     "autoRegister": {
       "type": "boolean",
@@ -33,5 +38,5 @@
     "ghcr.io/devcontainers/features/python"
   ],
   "postCreateCommand": "lsp-mcp-register",
-  "postStartCommand": "nohup lsp-mcp serve >/tmp/lsp-mcp.log 2>&1 &"
+  "postStartCommand": "nohup lsp-mcp-serve >/tmp/lsp-mcp.log 2>&1 &"
 }
