@@ -7,6 +7,7 @@ source dev-container-features-test-lib
 check "codebase-memory-mcp on PATH" bash -c "command -v codebase-memory-mcp"
 check "codebase-memory-mcp --version" bash -c "codebase-memory-mcp --version"
 check "codebase-memory-mcp-register installed" bash -c "test -x /usr/local/bin/codebase-memory-mcp-register"
+check "codebase-memory-mcp-index installed" bash -c "test -x /usr/local/bin/codebase-memory-mcp-index"
 
 # Drive a real stdio MCP handshake (initialize -> initialized -> tools/list),
 # the same sequence a real MCP client speaks, and confirm the tool set comes back.
@@ -23,5 +24,33 @@ mkdir -p /tmp/cbm-test-workspace
 cd /tmp/cbm-test-workspace
 codebase-memory-mcp-register
 check ".mcp.json registered" bash -c 'grep -q "codebase-memory-mcp" /tmp/cbm-test-workspace/.mcp.json'
+
+# Lifecycle indexing (postStartCommand): the helper indexes the workspace so the
+# MCP tools work out of the box, and is idempotent on re-run.
+check "index helper indexes the workspace" bash -c '
+  cd /tmp/cbm-test-workspace
+  printf "def hello():\n    return 1\n" > sample.py
+  codebase-memory-mcp-index
+  # helper dispatches indexing in the background; wait for the store to populate.
+  proj="$(printf "%s" "$PWD" | sed "s#^/##; s#/#-#g")"
+  for _ in $(seq 1 30); do
+    if codebase-memory-mcp cli list_projects "{}" 2>/dev/null | grep -q "$proj"; then
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "workspace was not indexed within timeout" >&2
+  codebase-memory-mcp cli list_projects "{}" >&2 || true
+  exit 1
+'
+
+check "index helper is idempotent (no re-index when already indexed)" bash -c '
+  cd /tmp/cbm-test-workspace
+  codebase-memory-mcp-index | grep -q "already indexed"
+'
+
+check "fast mode leaves no in-workspace persistence artifact" bash -c '
+  test ! -e /tmp/cbm-test-workspace/.codebase-memory/graph.db.zst
+'
 
 reportResults
