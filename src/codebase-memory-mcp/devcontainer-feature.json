@@ -1,6 +1,6 @@
 {
   "id": "codebase-memory-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "Codebase Memory MCP (repo-scale structural graph)",
   "description": "Installs codebase-memory-mcp (https://github.com/DeusData/codebase-memory-mcp), a single static binary that indexes the workspace into a persistent knowledge graph and exposes it as a stdio MCP server: architecture overview, call-graph traversal, dead-code detection, HTTP/gRPC cross-service linking, git-diff impact analysis, and Cypher-like graph queries.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/codebase-memory-mcp",
@@ -19,7 +19,12 @@
     "autoIndex": {
       "type": "boolean",
       "default": false,
-      "description": "Enable auto-indexing new projects on first MCP session connection (config: auto_index)."
+      "description": "Enable the binary's own lazy auto-indexing of new projects on first MCP session connection (config: auto_index). Independent of indexOnStart, which eagerly indexes the workspace at container start."
+    },
+    "indexOnStart": {
+      "type": "boolean",
+      "default": true,
+      "description": "Eagerly index the workspace project at container start (postStartCommand) so the MCP tools work out of the box on the first call. Idempotent (skips already-indexed projects), uses 'fast' mode (no similarity/semantic edges, no .codebase-memory persistence artifact), and runs in the background."
     },
     "autoRegister": {
       "type": "boolean",
@@ -30,5 +35,6 @@
   "installsAfter": [
     "ghcr.io/devcontainers/features/common-utils"
   ],
-  "postCreateCommand": "codebase-memory-mcp-register"
+  "postCreateCommand": "codebase-memory-mcp-register",
+  "postStartCommand": "codebase-memory-mcp-index"
 }

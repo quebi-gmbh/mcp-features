@@ -8,9 +8,10 @@ VERSION="${VERSION:-latest}"
 UI="${UI:-false}"
 AUTOINDEX="${AUTOINDEX:-false}"
 AUTOREGISTER="${AUTOREGISTER:-true}"
+INDEXONSTART="${INDEXONSTART:-true}"
 INSTALL_DIR="/usr/local/bin"
 
-echo "[codebase-memory-mcp] installing (version=${VERSION}, ui=${UI}, autoRegister=${AUTOREGISTER})"
+echo "[codebase-memory-mcp] installing (version=${VERSION}, ui=${UI}, autoRegister=${AUTOREGISTER}, indexOnStart=${INDEXONSTART})"
 
 # 1. jq is used by the .mcp.json register helper; best-effort install if missing.
 if ! command -v jq >/dev/null 2>&1; then
@@ -55,5 +56,39 @@ mv "\${tmp}" "\${mcp_json}"
 echo "[codebase-memory-mcp] registered codebase-memory server in \${mcp_json}"
 EOF
 chmod +x /usr/local/bin/codebase-memory-mcp-register
+
+# 5. Helper (run by postStartCommand, cwd = workspace folder) that makes an index
+#    EXIST for the workspace so the MCP tools work out of the box. A fresh container
+#    has an empty store, so the first search_graph/search_code/trace_path call returns
+#    "No projects indexed" and the agent falls back to grep. This eagerly indexes the
+#    workspace once, so the tools return structural results on the first call.
+#
+#    - Idempotent: skips if the workspace project is already in the store.
+#    - "fast" mode: no similarity/semantic edges and NO .codebase-memory persistence
+#      artifact (matches claude-manager's "no graph persistence" requirement).
+#    - Non-blocking: runs in the background so it never holds up container start or
+#      the agent's first tool call.
+cat > /usr/local/bin/codebase-memory-mcp-index << EOF
+#!/usr/bin/env bash
+set -euo pipefail
+[ "${INDEXONSTART}" = "true" ] || exit 0
+command -v codebase-memory-mcp >/dev/null 2>&1 || exit 0
+
+# Project name is derived from the absolute path the way codebase-memory-mcp does it:
+# strip the leading slash, then replace remaining slashes with dashes.
+proj="\$(printf '%s' "\${PWD}" | sed 's#^/##; s#/#-#g')"
+
+# Idempotent guard: if the workspace project is already indexed, do nothing.
+if codebase-memory-mcp cli list_projects '{}' 2>/dev/null | grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"\${proj}\""; then
+  echo "[codebase-memory-mcp] workspace already indexed (\${proj}); skipping"
+  exit 0
+fi
+
+# "fast" mode: no similarity/semantic edges, no .codebase-memory persistence artifact.
+payload="{\"repo_path\":\"\${PWD}\",\"mode\":\"fast\"}"
+echo "[codebase-memory-mcp] indexing workspace \${PWD} (mode=fast) in the background..."
+nohup codebase-memory-mcp cli index_repository "\${payload}" >/tmp/codebase-memory-mcp-index.log 2>&1 &
+EOF
+chmod +x /usr/local/bin/codebase-memory-mcp-index
 
 echo "[codebase-memory-mcp] done."

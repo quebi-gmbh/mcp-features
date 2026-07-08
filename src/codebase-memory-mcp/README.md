@@ -29,7 +29,8 @@ complementary, not redundant — see the root README's design philosophy section
 | --- | --- | --- | --- |
 | `version` | string | `latest` | Release tag to install (e.g. `v0.8.0`), or `latest`. |
 | `ui` | boolean | `false` | Install the UI variant (adds an optional 3D graph-visualization web UI at `localhost:9749`). |
-| `autoIndex` | boolean | `false` | Auto-index new projects on first MCP session connection (`config set auto_index`). |
+| `autoIndex` | boolean | `false` | The binary's own lazy auto-indexing of new projects on first MCP session connection (`config set auto_index`). Independent of `indexOnStart`. |
+| `indexOnStart` | boolean | `true` | Eagerly index the workspace project at container start (`postStartCommand`) so the MCP tools work out of the box on the first call. Idempotent, `fast` mode (no persistence artifact), runs in the background. |
 | `autoRegister` | boolean | `true` | Merge the server into `.mcp.json`. Set `false` if `claude-manager` owns it. |
 
 ## Lifecycle
@@ -43,10 +44,19 @@ complementary, not redundant — see the root README's design philosophy section
   feature's resolved options baked in.
 - **`postCreateCommand`** — runs `codebase-memory-mcp-register` to merge the stdio entry into
   `.mcp.json`, unless `autoRegister` is `false`.
+- **`postStartCommand`** — runs `codebase-memory-mcp-index`, which makes an index **exist** for the
+  workspace so the MCP tools work out of the box (unless `indexOnStart` is `false`). Without this a
+  fresh container has an empty store, so the first `search_graph`/`search_code`/`trace_path` call
+  returns *"No projects indexed"*, the agent falls back to `grep`, and never tries the tools again.
+  The helper is **idempotent** (skips if the workspace project is already in the store), indexes in
+  **`fast`** mode (no similarity/semantic edges and **no** `.codebase-memory/graph.db.zst` persistence
+  artifact), and runs **in the background** so it never blocks container start or the first tool call.
 
-There's no `postStartCommand`: like `orama-mcp`, this is a **stdio** server — the MCP client spawns
-it on demand per session rather than it running as a standing service. Its background file watcher
-(`auto_watch`, default enabled) lives only as long as that spawned process does.
+Unlike the HTTP `lsp-mcp` service, the `postStartCommand` here does **not** start a standing daemon:
+like `orama-mcp`, this is a **stdio** server — the MCP client spawns it on demand per session rather
+than it running as a service. Its background file watcher (`auto_watch`, default enabled) lives only
+as long as that spawned process does. The `postStartCommand` only ensures the shared index exists;
+it exits as soon as indexing is dispatched.
 
 ## Registration output
 
@@ -56,9 +66,12 @@ it on demand per session rather than it running as a standing service. Its backg
 
 ## Notes
 
-- First use per project requires indexing: say "index this project" (or enable `autoIndex`). Indexing
+- The workspace is indexed for you at container start (`indexOnStart`, default on), so the tools work
+  on the first call — no "index this project" step. For extra projects opened later you can still say
+  "index this project" (or enable `autoIndex` for lazy indexing on first session connection). Indexing
   is fast (an average repo in milliseconds; the Linux kernel in ~3 minutes) and runs in-memory, with
-  results persisted to SQLite under `~/.cache/codebase-memory-mcp/`.
+  results kept in the shared store under `~/.cache/codebase-memory-mcp/`. `fast` mode writes no
+  in-workspace `.codebase-memory/graph.db.zst` persistence artifact.
 - Read-only over your source: it only writes to its own SQLite cache and to Architecture Decision
   Records (`manage_adr`) it manages itself. It never edits your code — that's what `lsp-mcp` is for.
 - One of its 14 tools, `semantic_query`, does vector search over the indexed graph using a bundled
