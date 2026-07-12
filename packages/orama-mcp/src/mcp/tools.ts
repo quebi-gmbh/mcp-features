@@ -16,12 +16,12 @@ function errorResult(message: string): CallToolResult {
 export function registerTools(server: McpServer, engine: KnowledgeEngine, root: string): void {
   server.tool(
     "search_knowledge",
-    "Hybrid (BM25 + vector) search over indexed Markdown and JSONL knowledge files.",
+    "Hybrid (BM25 + vector) search over indexed Markdown, JSONL, and PDF knowledge files.",
     {
       query: z.string().describe("Natural-language or keyword search query"),
       k: z.number().int().optional().default(10).describe("Max results to return"),
       path: z.string().optional().describe("Restrict results to this indexed file path"),
-      source: z.enum(["markdown", "jsonl"]).optional().describe("Restrict results to this source type"),
+      source: z.enum(["markdown", "jsonl", "pdf"]).optional().describe("Restrict results to this source type"),
     },
     async ({ query, k, path, source }): Promise<CallToolResult> => {
       const hits = await engine.search(query, k, { path, source });
@@ -41,7 +41,11 @@ export function registerTools(server: McpServer, engine: KnowledgeEngine, root: 
       if (!engine.hasSource(path)) {
         return errorResult(`'${path}' is not an indexed file. Call list_sources to see what's indexed.`);
       }
-      const text = readFileSync(resolve(root, path), "utf8");
+      // PDFs have no readable-on-disk text; serve the extracted/indexed text instead.
+      // For text sources, read the file for full fidelity (chunking may drop noise).
+      const text = path.endsWith(".pdf")
+        ? (engine.documentText(path) ?? "")
+        : readFileSync(resolve(root, path), "utf8");
       return textResult(text);
     },
   );

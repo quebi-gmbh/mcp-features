@@ -1,8 +1,8 @@
 {
   "id": "orama-mcp",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "name": "Orama MCP (repo knowledge search)",
-  "description": "Installs a stdio MCP server that indexes Markdown and JSONL files in the workspace with Orama (in-memory hybrid BM25 + vector search) and exposes them to MCP clients such as Claude Code.",
+  "description": "Installs a stdio MCP server that indexes Markdown, JSONL, and PDF files in the workspace with Orama (in-memory hybrid BM25 + vector search) and exposes them to MCP clients such as Claude Code.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/orama-mcp",
   "licenseURL": "https://github.com/quebi-gmbh/mcp-features/blob/main/LICENSE",
   "options": {
@@ -13,8 +13,13 @@
     },
     "globs": {
       "type": "string",
-      "default": "**/*.md,**/*.jsonl",
+      "default": "**/*.md,**/*.jsonl,**/*.pdf",
       "description": "Comma-separated globs of files to index."
+    },
+    "ocr": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable OCR fallback for scanned/image-only PDFs (pages with no text layer). Installs tesseract.js and passes --ocr to the server. Born-digital PDFs never need this."
     },
     "autoRegister": {
       "type": "boolean",

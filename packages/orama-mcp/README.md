@@ -1,7 +1,7 @@
 # @quebi/orama-mcp
 
-A **stdio MCP server** that indexes every **Markdown** and **JSONL** file in the workspace with
-[Orama](https://github.com/oramasearch/orama) and exposes them to MCP clients as hybrid
+A **stdio MCP server** that indexes every **Markdown**, **JSONL**, and **PDF** file in the workspace
+with [Orama](https://github.com/oramasearch/orama) and exposes them to MCP clients as hybrid
 (BM25 + vector) search. In-memory, live-updating, offline at query time, zero external services.
 
 > Runtime: **Bun** + TypeScript. Transport: **stdio** (the MCP client spawns it on demand — there
@@ -17,16 +17,29 @@ keeps language servers warm and therefore runs as an HTTP service.)
 
 | Tool | Signature | Returns |
 | --- | --- | --- |
-| `search_knowledge` | `(query, k? = 10, path?, source?)` | ranked text hits (`path`, `heading`, snippet, score) via hybrid BM25 + vector search |
-| `get_document` | `(path)` | full source text of an indexed file |
+| `search_knowledge` | `(query, k? = 10, path?, source?)` | ranked text hits (`path`, `heading`, snippet, score) via hybrid BM25 + vector search; `source` ∈ `markdown` \| `jsonl` \| `pdf` |
+| `get_document` | `(path)` | full source text of an indexed file (for PDFs: the extracted text) |
 | `list_sources` | `()` | indexed files with chunk counts |
 
 ## Sources (pluggable adapters)
 
 - **Markdown (`**/*.md`)** — header-based chunking; one chunk per `#`-`######` section, carrying `{ path, heading }`. Content before the first header becomes a headerless chunk. Header-only sections (no body text) are dropped.
 - **JSONL (`**/*.jsonl`)** — one line = one chunk. Expects a `text` or `content` string field; malformed or fieldless lines are skipped.
+- **PDF (`**/*.pdf`)** — one chunk per page (heading `page N`), text pulled from the embedded text layer via [`unpdf`](https://github.com/unjs/unpdf) (bundled pdf.js, no native deps). Empty pages are dropped. Extracted page text is cached on disk under `<cache>/pdf-text/<sha256>.json` keyed by the file's **byte** hash, so a PDF is only re-parsed when its bytes change. Because parsing is heavier than reading text files, the watcher caps concurrent file indexing (4 at a time).
 
 New source types = new adapter modules under `src/adapters/` feeding the same `KnowledgeEngine`.
+
+### OCR fallback (`--ocr`, opt-in)
+
+Born-digital PDFs (a real text layer — most papers) need no OCR; the above covers them. Scanned /
+image-only PDFs have no text layer, so pages come back empty. With `--ocr`, those pages (and only
+those — pages with usable text are left untouched) are rasterized and run through OCR.
+
+OCR uses [`tesseract.js`](https://github.com/naptha/tesseract.js), loaded via a **lazy, computed
+`import`** so it is *not* a dependency of this package and never enters the default bundle/image. To
+use it: `bun add tesseract.js`, then pass `--ocr`. If `--ocr` is set but the package isn't installed,
+the server logs a warning and falls back to text-layer-only extraction. The OCR flag is part of the
+cache key (`<sha256>.ocr.json`), so toggling it never serves stale text-only output.
 
 ## Embeddings
 
@@ -63,13 +76,14 @@ always excluded.
 ```bash
 bun install
 bun run build
-bun run start -- --root /path/to/repo --globs "**/*.md,**/*.jsonl"
+bun run start -- --root /path/to/repo --globs "**/*.md,**/*.jsonl,**/*.pdf"
 bun run typecheck
 bun run test
 ```
 
-CLI flags: `--root` (default cwd), `--globs` (default `**/*.md,**/*.jsonl`), `--cache` (default
-`.orama-cache` under root — gitignore this).
+CLI flags: `--root` (default cwd), `--globs` (default `**/*.md,**/*.jsonl,**/*.pdf`), `--cache`
+(default `.orama-cache` under root — gitignore this), `--ocr` (opt-in OCR fallback for scanned PDFs;
+requires `tesseract.js`, see above).
 
 ## Non-goals
 

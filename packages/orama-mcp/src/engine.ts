@@ -1,10 +1,10 @@
 import { create, insert, remove, search, type AnyOrama } from "@orama/orama";
-import type { Chunk } from "./adapters/types";
+import type { Chunk, ChunkSource } from "./adapters/types";
 import { EMBEDDING_DIM, Embedder } from "./embeddings";
 
 export interface SearchFilter {
   path?: string;
-  source?: "markdown" | "jsonl";
+  source?: ChunkSource;
 }
 
 export interface SearchHit {
@@ -31,6 +31,9 @@ export class KnowledgeEngine {
   private readonly db: AnyOrama;
   private readonly embedder: Embedder;
   private readonly idsByPath = new Map<string, string[]>();
+  /** Reconstructed full text per file, so `get_document` can serve extracted
+   * content for sources with no readable-on-disk text (e.g. binary PDFs). */
+  private readonly textByPath = new Map<string, string>();
 
   constructor(cacheDir: string) {
     this.db = create({
@@ -59,7 +62,10 @@ export class KnowledgeEngine {
       });
       ids.push(id);
     }
-    if (ids.length > 0) this.idsByPath.set(path, ids);
+    if (ids.length > 0) {
+      this.idsByPath.set(path, ids);
+      this.textByPath.set(path, chunks.map((c) => c.text).join("\n\n"));
+    }
   }
 
   async removeFile(path: string): Promise<void> {
@@ -69,10 +75,16 @@ export class KnowledgeEngine {
       await remove(this.db, id);
     }
     this.idsByPath.delete(path);
+    this.textByPath.delete(path);
   }
 
   hasSource(path: string): boolean {
     return this.idsByPath.has(path);
+  }
+
+  /** Full indexed text for a file (chunks rejoined), or undefined if not indexed. */
+  documentText(path: string): string | undefined {
+    return this.textByPath.get(path);
   }
 
   listSources(): SourceInfo[] {

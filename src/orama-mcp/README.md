@@ -1,14 +1,14 @@
 # orama-mcp (Dev Container Feature)
 
-Installs the [`@quebi/orama-mcp`](../../packages/orama-mcp) stdio MCP server and (optionally)
-registers it in the workspace `.mcp.json`.
+Installs the [`@quebi/orama-mcp`](../../packages/orama-mcp) stdio MCP server (hybrid BM25 + vector
+search over Markdown, JSONL, and PDF) and (optionally) registers it in the workspace `.mcp.json`.
 
 ## Usage
 
 ```jsonc
 "features": {
   "ghcr.io/quebi-gmbh/mcp-features/orama-mcp:0": {
-    "globs": "**/*.md,**/*.jsonl"
+    "globs": "**/*.md,**/*.jsonl,**/*.pdf"
   }
 }
 ```
@@ -18,8 +18,13 @@ registers it in the workspace `.mcp.json`.
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `version` | string | `latest` | Git ref (branch, tag, or commit) of this repo to build `packages/orama-mcp` from. `latest` resolves to `main`. |
-| `globs` | string | `**/*.md,**/*.jsonl` | Comma-separated globs to index. |
+| `globs` | string | `**/*.md,**/*.jsonl,**/*.pdf` | Comma-separated globs to index. |
+| `ocr` | boolean | `false` | Enable OCR fallback for scanned/image-only PDFs (installs `tesseract.js`, passes `--ocr`). Born-digital PDFs never need this. |
 | `autoRegister` | boolean | `true` | Merge the server into `.mcp.json`. Set `false` if `claude-manager` owns it. |
+
+PDFs are indexed one chunk per page from the embedded text layer (via bundled pdf.js — no native
+deps). With `ocr: true`, pages lacking a text layer are rasterized and OCR'd; see the
+[package README](../../packages/orama-mcp/README.md#ocr-fallback---ocr-opt-in) for details.
 
 ## Lifecycle
 
@@ -39,8 +44,10 @@ No service to start — the MCP client spawns `orama-mcp` on demand (stdio).
 ## Registration output
 
 ```jsonc
-{ "mcpServers": { "orama": { "command": "orama-mcp", "args": ["--globs", "**/*.md,**/*.jsonl"] } } }
+{ "mcpServers": { "orama": { "command": "orama-mcp", "args": ["--globs", "**/*.md,**/*.jsonl,**/*.pdf"] } } }
 ```
+
+(With `ocr: true`, `"--ocr"` is appended to `args`.)
 
 ## Notes
 
