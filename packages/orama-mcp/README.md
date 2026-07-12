@@ -49,8 +49,15 @@ external service. Each chunk's embedding is cached on disk under `<cache>/embedd
 keyed by the chunk's own content hash, so a restart only re-embeds text that actually changed.
 
 **Cold start**: the model itself is fetched from the Hugging Face Hub on first use per machine (and
-cached by the library thereafter) — the one point where this isn't fully offline. After that, and
-across restarts, only genuinely new/changed chunks pay the embedding cost.
+cached under `<cache>/models` thereafter) — the one point where this isn't fully offline. After
+that, and across restarts, only genuinely new/changed chunks pay the embedding cost.
+
+> **Why `<cache>/models` and not the library default:** transformers.js caches downloaded models
+> under its own package directory (`<pkg>/.cache`) and honors no environment override. In the
+> installed feature that directory is root-owned while the server runs as an unprivileged user, so
+> the download would fail with `EACCES` and the index would silently stay empty. We redirect it via
+> `env.cacheDir` (the only supported override) into the workspace-local, writable, gitignored cache
+> dir — see `src/embeddings.ts`.
 
 ### A build note: native ONNX deps and bundling
 

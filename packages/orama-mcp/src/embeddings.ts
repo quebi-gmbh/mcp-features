@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { env, pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 import { hashText } from "./util/hash";
 
 export const EMBEDDING_DIM = 384;
@@ -11,7 +11,15 @@ const MODEL_ID = "Xenova/all-MiniLM-L6-v2";
 export class Embedder {
   private extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
-  constructor(private readonly cacheDir: string) {}
+  constructor(private readonly cacheDir: string) {
+    // transformers.js defaults its downloaded-model cache to <its-package-dir>/.cache
+    // and honors NO environment override — only this programmatic setting. In the
+    // installed image that package dir is root-owned while this server runs as an
+    // unprivileged user, so the model download hits EACCES and the index silently
+    // stays empty. Point the cache at our own workspace-local dir (node-writable,
+    // gitignored, alongside the embedding-vector cache) to avoid that entirely.
+    env.cacheDir = join(cacheDir, "models");
+  }
 
   private getExtractor(): Promise<FeatureExtractionPipeline> {
     if (!this.extractorPromise) {
