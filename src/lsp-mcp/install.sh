@@ -19,6 +19,12 @@ echo "[lsp-mcp] installing (version=${VERSION}, port=${PORT}, autoRegister=${AUT
 export UV_INSTALL_DIR="/usr/local/bin"
 export UV_TOOL_BIN_DIR="/usr/local/bin"
 export UV_TOOL_DIR="/usr/local/share/uv-tools"
+# uv provisions a managed CPython for the tool venv. By default it lands in root's
+# HOME ($XDG_DATA_HOME/uv/python = /root/.local/share/uv/python), which is mode 700
+# and unreadable by a non-root runtime user — the tool venv's `python` symlink then
+# points into it and every entrypoint fails with "bad interpreter: Permission denied".
+# Pin it to a world-readable system path (chmod'd below) so any runtime user can exec it.
+export UV_PYTHON_INSTALL_DIR="/usr/local/share/uv-python"
 
 # 1. Ensure uv is available (Serena is managed by uv; see its Quick Start).
 if ! command -v uv >/dev/null 2>&1; then
@@ -42,8 +48,9 @@ fi
 echo "[lsp-mcp] installing ${SERENA_PKG} (python ${PYTHONVERSION})..."
 uv tool install --python "${PYTHONVERSION}" "${SERENA_PKG}"
 
-# Make the installed tool tree readable/executable by any runtime user.
-chmod -R a+rX "${UV_TOOL_DIR}" 2>/dev/null || true
+# Make the installed tool tree AND the managed Python readable/executable by any
+# runtime user (the venv's python symlink resolves into UV_PYTHON_INSTALL_DIR).
+chmod -R a+rX "${UV_TOOL_DIR}" "${UV_PYTHON_INSTALL_DIR}" 2>/dev/null || true
 
 # 4. Create Serena's global config (no project needed yet; the workspace isn't
 #    mounted at build time).
@@ -56,6 +63,20 @@ serena init --language-backend LSP
 cat > /usr/local/bin/lsp-mcp-serve << EOF
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Preflight: Serena is a console script whose shebang points at the tool venv's
+# interpreter. If that interpreter lives in a path the runtime user can't traverse
+# or exec (e.g. a managed CPython left under root-only /root/.local), every serena
+# invocation dies with an opaque "bad interpreter: Permission denied". Fail loudly
+# with an actionable message instead of silently leaving port ${PORT} unbound.
+PY="${UV_TOOL_DIR}/serena-agent/bin/python"
+if [ ! -x "\${PY}" ] || ! "\${PY}" -c '' >/dev/null 2>&1; then
+  echo "[lsp-mcp] FATAL: Serena's interpreter (\${PY}) is not executable by user \$(id -un)." >&2
+  echo "[lsp-mcp] Likely the managed CPython is in a non-readable path. Rebuild the container," >&2
+  echo "[lsp-mcp] or reinstall as root with UV_PYTHON_INSTALL_DIR set to a world-readable dir." >&2
+  exit 1
+fi
+
 exec serena start-mcp-server \\
   --transport streamable-http \\
   --host 127.0.0.1 \\
