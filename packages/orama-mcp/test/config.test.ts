@@ -6,8 +6,14 @@ describe("parseConfig", () => {
   test("applies defaults when no flags are given", () => {
     const config = parseConfig([]);
     expect(config.root).toBe(resolve(process.cwd()));
-    expect(config.globs).toEqual(["**/*.md", "**/*.jsonl"]);
+    expect(config.globs).toEqual(["**/*.md", "**/*.jsonl", "**/*.pdf"]);
     expect(config.cacheDir).toBe(resolve(process.cwd(), ".orama-cache"));
+    expect(config.ocr).toBe(false);
+  });
+
+  test("enables OCR when --ocr is passed", () => {
+    expect(parseConfig(["--ocr"]).ocr).toBe(true);
+    expect(parseConfig([]).ocr).toBe(false);
   });
 
   test("parses --root, --globs, and --cache", () => {

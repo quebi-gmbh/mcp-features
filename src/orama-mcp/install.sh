@@ -5,7 +5,8 @@
 set -euo pipefail
 
 VERSION="${VERSION:-latest}"
-GLOBS="${GLOBS:-**/*.md,**/*.jsonl}"
+GLOBS="${GLOBS:-**/*.md,**/*.jsonl,**/*.pdf}"
+OCR="${OCR:-false}"
 AUTOREGISTER="${AUTOREGISTER:-true}"
 REF="${VERSION}"
 [ "${REF}" = "latest" ] && REF="main"
@@ -14,7 +15,7 @@ REPO_URL="https://github.com/quebi-gmbh/mcp-features.git"
 SRC_DIR="/opt/orama-mcp-src"
 PKG_DIR="${SRC_DIR}/packages/orama-mcp"
 
-echo "[orama-mcp] installing (ref=${REF}, globs=${GLOBS}, autoRegister=${AUTOREGISTER})"
+echo "[orama-mcp] installing (ref=${REF}, globs=${GLOBS}, ocr=${OCR}, autoRegister=${AUTOREGISTER})"
 
 # 1. Ensure git is available (needed to fetch packages/orama-mcp's source; it isn't
 #    published to a registry yet).
@@ -56,6 +57,15 @@ git -C "${SRC_DIR}" checkout --quiet "${REF}"
 cd "${PKG_DIR}"
 bun install --production
 bun run build
+
+# 5b. OCR is opt-in: tesseract.js is loaded via a lazy, computed import (not a
+#     package dependency, never bundled), so it must be installed here when
+#     requested. Skipped by default to keep the image lean.
+if [ "${OCR}" = "true" ]; then
+  echo "[orama-mcp] ocr enabled: installing tesseract.js..."
+  bun add tesseract.js
+fi
+
 chmod -R a+rX "${SRC_DIR}"
 
 # 6. Wrapper that runs the built server from its install location.
@@ -78,7 +88,9 @@ mcp_json="\${PWD}/.mcp.json"
 [ -f "\${mcp_json}" ] || echo '{}' > "\${mcp_json}"
 
 tmp="\$(mktemp)"
-jq --arg globs "${GLOBS}" '.mcpServers.orama = {command: "orama-mcp", args: ["--globs", \$globs]}' "\${mcp_json}" > "\${tmp}"
+jq --arg globs "${GLOBS}" --argjson ocr ${OCR} \
+  '.mcpServers.orama = {command: "orama-mcp", args: (["--globs", \$globs] + (if \$ocr then ["--ocr"] else [] end))}' \
+  "\${mcp_json}" > "\${tmp}"
 mv "\${tmp}" "\${mcp_json}"
 echo "[orama-mcp] registered orama server in \${mcp_json}"
 EOF

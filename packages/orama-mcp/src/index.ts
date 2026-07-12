@@ -18,7 +18,11 @@ async function main(): Promise<void> {
   registerTools(server, engine, config.root);
 
   const cacheDirName = config.cacheDir.slice(config.root.length + 1);
-  const stopWatcher = startWatcher(config.root, config.globs, cacheDirName, engine);
+  const stopWatcher = startWatcher(config.root, config.globs, engine, {
+    cacheDir: config.cacheDir,
+    cacheDirName,
+    ocr: config.ocr,
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
