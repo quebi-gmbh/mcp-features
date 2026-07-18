@@ -25,6 +25,17 @@ cd /tmp/cbm-test-workspace
 codebase-memory-mcp-register
 check ".mcp.json registered" bash -c 'grep -q "codebase-memory-mcp" /tmp/cbm-test-workspace/.mcp.json'
 
+# Registration must be best-effort: an unwritable workspace root (e.g. a fresh
+# root-owned named-volume workspace) must NOT fail the postCreateCommand and
+# abort container setup. Simulate an unwritable target by making .mcp.json a
+# directory (write fails regardless of the user the test runs as).
+check "register degrades gracefully when .mcp.json is unwritable" bash -c '
+  d=/tmp/cbm-test-ro
+  rm -rf "$d"; mkdir -p "$d/.mcp.json"
+  cd "$d"
+  codebase-memory-mcp-register   # must exit 0 (warn + skip), not abort
+'
+
 # Lifecycle indexing (postStartCommand): the helper indexes the workspace so the
 # MCP tools work out of the box, and is idempotent on re-run.
 check "index helper indexes the workspace" bash -c '
