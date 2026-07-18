@@ -48,12 +48,26 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || { echo "[codebase-memory-mcp] jq not found, skipping .mcp.json registration" >&2; exit 0; }
 
 mcp_json="\${PWD}/.mcp.json"
-[ -f "\${mcp_json}" ] || echo '{}' > "\${mcp_json}"
+
+# Best-effort from here down. The workspace root may be unwritable for the
+# remote user — e.g. a freshly-created named-volume workspace mounts root-owned,
+# or .mcp.json is owned by another tool (claude-manager, etc.). Registration is
+# a convenience, not a prerequisite: a failure here must NEVER fail the
+# postCreateCommand, which would abort the whole container setup (skipping every
+# later user command). Warn and exit 0 instead.
+if ! { [ -f "\${mcp_json}" ] || echo '{}' 2>/dev/null > "\${mcp_json}"; }; then
+  echo "[codebase-memory-mcp] \${mcp_json} not writable; skipping registration" >&2
+  exit 0
+fi
 
 tmp="\$(mktemp)"
-jq '.mcpServers["codebase-memory"] = {command: "codebase-memory-mcp", args: []}' "\${mcp_json}" > "\${tmp}"
-mv "\${tmp}" "\${mcp_json}"
-echo "[codebase-memory-mcp] registered codebase-memory server in \${mcp_json}"
+if jq '.mcpServers["codebase-memory"] = {command: "codebase-memory-mcp", args: []}' "\${mcp_json}" > "\${tmp}" 2>/dev/null && mv "\${tmp}" "\${mcp_json}" 2>/dev/null; then
+  echo "[codebase-memory-mcp] registered codebase-memory server in \${mcp_json}"
+else
+  rm -f "\${tmp}"
+  echo "[codebase-memory-mcp] could not update \${mcp_json}; skipping registration" >&2
+  exit 0
+fi
 EOF
 chmod +x /usr/local/bin/codebase-memory-mcp-register
 
