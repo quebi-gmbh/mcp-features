@@ -35,13 +35,16 @@ complementary, not redundant — see the root README's design philosophy section
 
 ## Lifecycle
 
-- **build (`install.sh`)** — runs the upstream installer (`--dir=/usr/local/bin --skip-config`),
-  which detects OS/arch, downloads the matching release archive, and verifies its SHA-256 checksum
-  before installing. `--skip-config` opts out of the binary's own multi-agent auto-configuration
-  (which would run against the build-time filesystem, before any workspace or agent config exists,
-  and doesn't fit this repo's registration convention) — we register it ourselves instead. Also
-  sets the global `auto_index` config and writes a `codebase-memory-mcp-register` helper with this
-  feature's resolved options baked in.
+- **build (`install.sh`)** — downloads the matching release archive (`linux-<arch>-portable`,
+  UI variant if `ui` is set) straight from GitHub Releases, verifies its SHA-256 against the
+  release's `checksums.txt`, and installs the binary to `/usr/local/bin` itself. It deliberately
+  does **not** run upstream's `install.sh` (whose logic tracks upstream `main` and can change
+  between builds — pinning `version` here pins everything) and never invokes the binary's own
+  `install` subcommand, so its multi-agent auto-configuration (which would run against the
+  build-time filesystem, before any workspace or agent config exists, and doesn't fit this repo's
+  registration convention) never runs — we register it ourselves instead. Also sets the global
+  `auto_index` config and writes a `codebase-memory-mcp-register` helper with this feature's
+  resolved options baked in.
 - **`postCreateCommand`** — runs `codebase-memory-mcp-register` to merge the stdio entry into
   `.mcp.json`, unless `autoRegister` is `false`.
 - **`postStartCommand`** — runs `codebase-memory-mcp-index`, which makes an index **exist** for the

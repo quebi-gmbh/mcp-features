@@ -19,22 +19,45 @@ if ! command -v jq >/dev/null 2>&1; then
   (apt-get update -qq && apt-get install -y -qq jq) || echo "[codebase-memory-mcp] warning: could not install jq; registration will be skipped at runtime"
 fi
 
-# 2. Install the binary via the project's own installer: it detects OS/arch,
-#    verifies the release checksum, and (with --skip-config) installs only the
-#    binary — we do our own MCP registration below for consistency with the
-#    other features in this repo.
-INSTALL_ARGS=(--dir="${INSTALL_DIR}" --skip-config)
+# 2. Install the binary by downloading the release artifact directly (we do our
+#    own MCP registration below for consistency with the other features in this
+#    repo). Deliberately NOT piping upstream main's install.sh: its logic tracks
+#    upstream main and can change under us between builds, whereas a pinned
+#    VERSION here pins everything — download URL, checksum, and install steps.
+case "$(uname -m)" in
+  x86_64) ARCH="amd64" ;;
+  aarch64 | arm64) ARCH="arm64" ;;
+  *)
+    echo "[codebase-memory-mcp] error: unsupported architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+VARIANT="codebase-memory-mcp"
 if [ "${UI}" = "true" ]; then
-  INSTALL_ARGS+=(--ui)
+  VARIANT="codebase-memory-mcp-ui"
+fi
+ASSET="${VARIANT}-linux-${ARCH}-portable.tar.gz"
+
+if [ "${VERSION}" = "latest" ]; then
+  BASE_URL="https://github.com/DeusData/codebase-memory-mcp/releases/latest/download"
+else
+  BASE_URL="https://github.com/DeusData/codebase-memory-mcp/releases/download/${VERSION}"
 fi
 
-# CBM_DOWNLOAD_URL lets us pin an exact release instead of always "latest"
-# (the upstream installer only supports latest/download by default).
-if [ "${VERSION}" != "latest" ]; then
-  export CBM_DOWNLOAD_URL="https://github.com/DeusData/codebase-memory-mcp/releases/download/${VERSION}"
-fi
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
 
-curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash -s -- "${INSTALL_ARGS[@]}"
+echo "[codebase-memory-mcp] downloading ${BASE_URL}/${ASSET}"
+curl -fsSL -o "${TMP_DIR}/${ASSET}" "${BASE_URL}/${ASSET}"
+curl -fsSL -o "${TMP_DIR}/checksums.txt" "${BASE_URL}/checksums.txt"
+(cd "${TMP_DIR}" && grep "[[:space:]]${ASSET}\$" checksums.txt | sha256sum -c -)
+
+# Both variants' tarballs ship the binary as a flat "codebase-memory-mcp" entry.
+tar -xzf "${TMP_DIR}/${ASSET}" -C "${TMP_DIR}" codebase-memory-mcp
+install -m 0755 "${TMP_DIR}/codebase-memory-mcp" "${INSTALL_DIR}/codebase-memory-mcp"
+
+codebase-memory-mcp --version
 
 # 3. Global config (no project needed yet; the workspace isn't mounted at build time).
 codebase-memory-mcp config set auto_index "${AUTOINDEX}"

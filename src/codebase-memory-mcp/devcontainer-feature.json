@@ -1,6 +1,6 @@
 {
   "id": "codebase-memory-mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "name": "Codebase Memory MCP (repo-scale structural graph)",
   "description": "Installs codebase-memory-mcp (https://github.com/DeusData/codebase-memory-mcp), a single static binary that indexes the workspace into a persistent knowledge graph and exposes it as a stdio MCP server: architecture overview, call-graph traversal, dead-code detection, HTTP/gRPC cross-service linking, git-diff impact analysis, and Cypher-like graph queries.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/codebase-memory-mcp",
