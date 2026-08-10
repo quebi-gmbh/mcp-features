@@ -19,6 +19,95 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # `devcontainer features publish` is version-gated and its skip is NOT
+      # fatal:
+      #
+      #   (!) WARNING: Version 0.2.0 already exists, skipping 0.2.0...
+      #
+      # So a feature whose source changed without a version bump publishes
+      # nothing while this job still reports success. That silently shipped
+      # nothing for lsp-mcp for a month (7552bc5 fixed the uv-python path but
+      # left version at 0.2.0, so :latest kept serving the pre-fix tarball).
+      #
+      # Guard: for each feature whose files changed in THIS push, fail if its
+      # declared version is already published. Features that did not change are
+      # expected to be skipped and are ignored.
+      - name: Guard against unbumped feature versions
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # New branch / force push / unavailable base: nothing reliable to diff.
+          if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "::notice::No usable base commit (${BEFORE}); skipping unbumped-version guard."
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "${BEFORE}" "${AFTER}" -- src/ \
+                     | cut -d/ -f2 | sort -u | grep -v '^$' || true)"
+
+          if [ -z "${changed}" ]; then
+            echo "No feature sources changed in this push."
+            exit 0
+          fi
+
+          failed=0
+          for feature in ${changed}; do
+            manifest="src/${feature}/devcontainer-feature.json"
+
+            # Read the manifest as of AFTER rather than from the working tree,
+            # so the check reflects the commit being published.
+            if ! manifest_json="$(git show "${AFTER}:${manifest}" 2>/dev/null)"; then
+              echo "::notice::${feature}: no manifest at ${AFTER} (deleted?), skipping."
+              continue
+            fi
+
+            version="$(printf '%s' "${manifest_json}" | jq -r '.version // empty')"
+            if [ -z "${version}" ]; then
+              echo "::error file=${manifest},title=Missing version::${feature} has no .version field."
+              failed=1
+              continue
+            fi
+            repo="quebi-gmbh/mcp-features/${feature}"
+
+            token="$(curl -sSL -u "x:${GH_TOKEN}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull" \
+              | jq -r '.token // empty')"
+
+            if [ -z "${token}" ]; then
+              echo "::notice::${feature}: could not obtain a registry token; skipping check."
+              continue
+            fi
+
+            code="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer ${token}" \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+              "https://ghcr.io/v2/${repo}/manifests/${version}")"
+
+            case "${code}" in
+              200)
+                echo "::error file=${manifest},title=Unbumped feature version::${feature} changed in this push but version ${version} is already published. \`devcontainer features publish\` would skip it and this job would still pass, shipping nothing. Bump .version in ${manifest}. (If this is a re-run of a commit that already published successfully, this failure is expected and safe to ignore.)"
+                failed=1
+                ;;
+              401|403|404)
+                echo "${feature}: ${version} not yet published (HTTP ${code}) — OK."
+                ;;
+              *)
+                echo "::warning::${feature}: unexpected HTTP ${code} querying ${repo}:${version}; not blocking."
+                ;;
+            esac
+          done
+
+          [ "${failed}" -eq 0 ] || exit 1
+
       - name: Publish Dev Container Features
         uses: devcontainers/action@v1
         with:
