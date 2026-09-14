@@ -1,7 +1,7 @@
 {
   "name": "@quebi/orama-mcp",
   "version": "0.0.0",
-  "description": "stdio MCP server that indexes Markdown and JSONL files in the workspace with Orama (in-memory hybrid search).",
+  "description": "MCP server that indexes Markdown, JSONL, and PDF files in the workspace with Orama (in-memory hybrid search). Runs as one shared streamable-HTTP service, or over stdio.",
   "license": "MIT",
   "type": "module",
   "bin": {

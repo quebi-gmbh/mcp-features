@@ -6,7 +6,7 @@ Reusable **[Dev Container Features](https://containers.dev/implementors/features
 | --- | --- | --- | --- |
 | **`lsp-mcp`** | Code intelligence — find symbol, find-references, hover/types, document & workspace symbols, diagnostics, LSP-backed rename — backed by real language servers. | HTTP (warm, long-running service) | wraps [`oraios/serena`](https://github.com/oraios/serena) (MIT) |
 | **`codebase-memory-mcp`** | Repo-scale structure — architecture overview, call-graph traversal, dead-code detection, HTTP/gRPC cross-service linking, git-diff blast-radius, Cypher-like graph queries. | stdio (client-spawned) | wraps [`DeusData/codebase-memory-mcp`](https://github.com/DeusData/codebase-memory-mcp) (MIT) |
-| **`orama-mcp`** | Repo knowledge search — hybrid (BM25 + vector) search over every Markdown and JSONL file in the workspace, kept live as files change. | stdio (client-spawned) | [`packages/orama-mcp`](packages/orama-mcp) |
+| **`orama-mcp`** | Repo knowledge search — hybrid (BM25 + vector) search over every Markdown, JSONL, and PDF file in the workspace, kept live as files change. | HTTP (warm, long-running service; stdio optional) | [`packages/orama-mcp`](packages/orama-mcp) |
 
 All three are **MIT licensed**, published as public OCI artifacts under `ghcr.io/quebi-gmbh/...`, and installable with one line in `devcontainer.json`.
 
@@ -31,7 +31,9 @@ dead-code detection, cross-service HTTP/gRPC linking, git-diff blast-radius. Mos
 analysis (tree-sitter + Cypher-like queries), not semantic search — see the note below.
 
 **Tier 2 — the only tier that primarily embeds, over prose.** That's **`orama-mcp`**: Markdown docs
-and JSONL knowledge records, indexed in-memory and updated live.
+and JSONL knowledge records, indexed in-memory and updated live — in **one** shared service per
+container, since an index and an embedding model are exactly the kind of state worth keeping warm
+across sessions rather than rebuilding per session.
 
 > **On "no vector-indexing code."** We previously ruled that out entirely, reasoning the CLI/LSP
 > tools above were exact and sufficient — and for single-symbol precision, they still are. But
@@ -76,8 +78,8 @@ Each feature can register itself by writing/merging a `.mcp.json` at the workspa
 {
   "mcpServers": {
     "orama": {
-      "command": "orama-mcp",
-      "args": ["--globs", "**/*.md,**/*.jsonl"]
+      "type": "http",
+      "url": "http://127.0.0.1:7338/mcp"
     },
     "codebase-memory": {
       "command": "codebase-memory-mcp",
@@ -91,7 +93,10 @@ Each feature can register itself by writing/merging a `.mcp.json` at the workspa
 }
 ```
 
-> **`claude-manager` integration.** `claude-manager` may prefer to own `.mcp.json` itself. In that case set `autoRegister: false` on all three features and have the daemon write the entries above into the project `.mcp.json` before launching the Claude session. The registration contract (stdio `command`/`args` for orama and codebase-memory, `http` `url` for lsp) is stable — that's the only coupling between this repo and `claude-manager`.
+(With `orama-mcp`'s `transport: stdio` option, its entry is the stdio shape instead:
+`{ "command": "orama-mcp", "args": ["--globs", "**/*.md,**/*.jsonl"] }`.)
+
+> **`claude-manager` integration.** `claude-manager` may prefer to own `.mcp.json` itself. In that case set `autoRegister: false` on all three features and have the daemon write the entries above into the project `.mcp.json` before launching the Claude session. The registration contract (stdio `command`/`args` for codebase-memory, `http` `url` for lsp and orama) is stable — that's the only coupling between this repo and `claude-manager`.
 
 ---
 
@@ -100,7 +105,7 @@ Each feature can register itself by writing/merging a `.mcp.json` at the workspa
 ```
 mcp-features/
 ├── packages/                 # the MCP server implementations we own (Bun + TypeScript)
-│   └── orama-mcp/            #   stdio MCP server over Orama
+│   └── orama-mcp/            #   MCP server over Orama (shared HTTP service, or stdio)
 ├── src/                      # the Dev Container Features (what ghcr publishes)
 │   ├── lsp-mcp/              #   devcontainer-feature.json + install.sh (wraps Serena)
 │   ├── codebase-memory-mcp/  #   devcontainer-feature.json + install.sh (wraps codebase-memory-mcp)
@@ -165,5 +170,6 @@ feature's `devcontainer-feature.json` and push to `main`.
   codebase-memory-mcp as a stdio MCP server. Live-verified end-to-end (install, `tools/list`,
   `index_repository`, `search_graph`, `trace_path`, and a Cypher `query_graph` dead-code check all
   confirmed against a real fixture project), same as `lsp-mcp`.
-- **`orama-mcp`** — 🚧 scaffold only; see its package/feature README `## Build plan` / TODO sections
-  for what to do next.
+- **`orama-mcp`** — implemented: `src/orama-mcp` builds and installs `packages/orama-mcp`, and runs
+  it as one shared streamable-HTTP MCP service per container (127.0.0.1:7338, next to `lsp-mcp`'s
+  7337). `transport: stdio` remains available for standalone/CI use.
