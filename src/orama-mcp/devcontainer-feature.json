@@ -1,6 +1,6 @@
 {
   "id": "orama-mcp",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "name": "Orama MCP (repo knowledge search)",
   "description": "Installs an MCP server that indexes Markdown, JSONL, and PDF files in the workspace with Orama (in-memory hybrid BM25 + vector search) and exposes them to MCP clients such as Claude Code. Runs by default as one shared streamable-HTTP service per container, so every client session reuses a single index and embedding model.",
   "documentationURL": "https://github.com/quebi-gmbh/mcp-features/tree/main/src/orama-mcp",
@@ -25,7 +25,7 @@
     "globs": {
       "type": "string",
       "default": "**/*.md,**/*.jsonl,**/*.pdf",
-      "description": "Comma-separated globs of files to index."
+      "description": "Comma-separated globs of files to index. Dot-directories (.claude, .worktrees, ...) are skipped unless a glob names one explicitly, e.g. '.claude/**/*.jsonl'."
     },
     "ocr": {
       "type": "boolean",

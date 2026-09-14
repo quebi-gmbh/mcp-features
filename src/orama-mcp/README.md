@@ -33,13 +33,20 @@ protocol shell. See the [package README](../../packages/orama-mcp/README.md#tran
 | `version` | string | `latest` | Git ref (branch, tag, or commit) of this repo to build `packages/orama-mcp` from. `latest` resolves to `main`. |
 | `transport` | string (`http` \| `stdio`) | `http` | `http` runs one shared service per container (started by `postStartCommand`). `stdio` registers the binary for the client to spawn per session instead — one full copy of the index per session. |
 | `port` | string | `7338` | Port for the shared HTTP service. Ignored when `transport: stdio`. |
-| `globs` | string | `**/*.md,**/*.jsonl,**/*.pdf` | Comma-separated globs to index. |
+| `globs` | string | `**/*.md,**/*.jsonl,**/*.pdf` | Comma-separated globs to index. Dot-directories are skipped unless a glob names one — see below. |
 | `ocr` | boolean | `false` | Enable OCR fallback for scanned/image-only PDFs (installs `tesseract.js`, passes `--ocr`). Born-digital PDFs never need this. |
 | `autoRegister` | boolean | `true` | Merge the server into `.mcp.json`. Set `false` if `claude-manager` owns it. |
 
 PDFs are indexed one chunk per page from the embedded text layer (via bundled pdf.js — no native
 deps). With `ocr: true`, pages lacking a text layer are rasterized and OCR'd; see the
 [package README](../../packages/orama-mcp/README.md#ocr-fallback---ocr-opt-in) for details.
+
+Globs do not descend into **dot-directories**: `**/*.jsonl` matches `docs/a.jsonl` but not
+`.claude/projects/a.jsonl`. Those trees are tool state, not authored knowledge, so the watcher skips
+them outright rather than spending an inotify watch per directory on content it can never index (on
+one checkout: 4,903 watched directories → 171, same 17 indexed files). Name one in a glob to index it
+anyway — `"globs": "**/*.md,.claude/**/*.jsonl"`. See the
+[package README](../../packages/orama-mcp/README.md#dot-directories-are-out-of-scope-unless-a-glob-names-one).
 
 ## Lifecycle
 
@@ -93,7 +100,9 @@ cd "$WORKSPACE" && orama-mcp-serve   # run it in the foreground to see it fail
 ```
 
 - **`files: 0`** — the service is up but the index is empty: indexing/embedding may still be running
-  (the first run per machine downloads the embedding model), or `globs` matches nothing.
+  (the first run per machine downloads the embedding model), or `globs` matches nothing — note that
+  a `**` glob never reaches inside a dot-directory, so `**/*.jsonl` alone will not index
+  `.claude/projects/`.
 - **Connection refused** — `postStartCommand` didn't run or the process died; `/tmp/orama-mcp.log`
   has the reason.
 - **"address already in use ... already serving it"** — benign. One shared server is the intended
