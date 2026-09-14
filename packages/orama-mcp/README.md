@@ -77,7 +77,7 @@ buffered unboundedly.
 ## Sources (pluggable adapters)
 
 - **Markdown (`**/*.md`)** — header-based chunking; one chunk per `#`-`######` section, carrying `{ path, heading }`. Content before the first header becomes a headerless chunk. Header-only sections (no body text) are dropped.
-- **JSONL (`**/*.jsonl`)** — one line = one chunk. Expects a `text` or `content` string field; malformed or fieldless lines are skipped.
+- **JSONL (`**/*.jsonl`)** — one line = one chunk. Expects a **top-level** `text` or `content` string field; malformed or fieldless lines are skipped. (Claude Code session transcripts nest their text under `message.content[]` and so yield nothing here.)
 - **PDF (`**/*.pdf`)** — one chunk per page (heading `page N`), text pulled from the embedded text layer via [`unpdf`](https://github.com/unjs/unpdf) (bundled pdf.js, no native deps). Empty pages are dropped. Extracted page text is cached on disk under `<cache>/pdf-text/<sha256>.json` keyed by the file's **byte** hash, so a PDF is only re-parsed when its bytes change. Because parsing is heavier than reading text files, the watcher caps concurrent file indexing (4 at a time).
 
 New source types = new adapter modules under `src/adapters/` feeding the same `KnowledgeEngine`.
@@ -134,8 +134,34 @@ Because chokidar takes one inotify watch per directory it descends into, the `--
 saves nothing on watch count — it only stops a matched-nothing file from being *indexed*. Directories
 that cannot hold indexable content are therefore pruned outright, by name, at any depth:
 `node_modules`, `.git`, `.pnpm-store`, `dist`, `build`, `.wrangler`, `.react-router` and
-`.playwright-mcp`, plus the cache directory itself. Gitignored-but-authored trees (`.claude/`, for
-one) are deliberately still watched.
+`.playwright-mcp`, plus the cache directory itself.
+
+### Dot-directories are out of scope unless a glob names one
+
+Glob matching runs with picomatch's default `dot: false`, so `*` and `**` never cross a path
+segment that starts with a dot: `**/*.jsonl` matches `docs/a.jsonl` but **not**
+`.claude/projects/a.jsonl`. That is the intended behaviour — dot-directories in a workspace hold
+tool state (`.claude`, `.worktrees`, `.vscode`, the cache dir itself), not authored knowledge, and
+indexing them by default would spend chunking and embedding on content nobody searches for.
+
+Such a directory is therefore pruned from the walk too, for the same reason as the list above: if no
+glob can reach into it, descending costs an inotify watch per directory and a recursive scan to
+index zero files. On a real checkout the two prunings together take **4,903 watched directories to
+171**, for the **same 17 indexed files**.
+
+Unlike the hard-refused names above, this pruning is glob-driven: name a dot-directory in a glob and
+it is both matched and watched again (a literal leading dot segment matches regardless of the
+option).
+
+```bash
+orama-mcp --root /repo --globs "**/*.md,.claude/**/*.jsonl"   # transcripts in, .worktrees still out
+```
+
+> **Session transcripts need more than this flag.** Claude Code writes `.claude/projects/*.jsonl`
+> with the message text nested under `message.content[]`; the JSONL adapter reads a **top-level**
+> `text`/`content` string and skips every other line, so those files currently index to zero chunks
+> even when a glob reaches them. Making transcripts searchable is an adapter change (and a capacity
+> decision about their size), not a glob change.
 
 ## Develop
 
@@ -153,7 +179,7 @@ CLI flags:
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--root` | cwd | Directory to index. |
-| `--globs` | `**/*.md,**/*.jsonl,**/*.pdf` | Comma-separated globs to index. |
+| `--globs` | `**/*.md,**/*.jsonl,**/*.pdf` | Comma-separated globs to index. Dot-directories are skipped unless a glob names one — see [above](#dot-directories-are-out-of-scope-unless-a-glob-names-one). |
 | `--cache` | `.orama-cache` under root | Embedding/PDF-text cache — gitignore this. |
 | `--ocr` | off | OCR fallback for scanned PDFs; requires `tesseract.js`, see above. |
 | `--transport` | `stdio` | `stdio` or `http`. `--http` is shorthand for `--transport http`. |
