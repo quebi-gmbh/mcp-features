@@ -5,17 +5,34 @@
 set -euo pipefail
 
 VERSION="${VERSION:-latest}"
+TRANSPORT="${TRANSPORT:-http}"
+PORT="${PORT:-7338}"
 GLOBS="${GLOBS:-**/*.md,**/*.jsonl,**/*.pdf}"
 OCR="${OCR:-false}"
 AUTOREGISTER="${AUTOREGISTER:-true}"
 REF="${VERSION}"
 [ "${REF}" = "latest" ] && REF="main"
 
+# Validate here, at build time: a bad value would otherwise surface as an unbound
+# port at container start, with every client silently degrading to ConnectionRefused.
+case "${TRANSPORT}" in
+  http | stdio) ;;
+  *)
+    echo "[orama-mcp] error: transport must be 'http' or 'stdio', got '${TRANSPORT}'" >&2
+    exit 1
+    ;;
+esac
+
+# Baked into the generated wrappers below (build-time interpolation), so the
+# conditional flag doesn't have to be re-derived at runtime.
+OCR_ARG=""
+[ "${OCR}" = "true" ] && OCR_ARG="--ocr"
+
 REPO_URL="https://github.com/quebi-gmbh/mcp-features.git"
 SRC_DIR="/opt/orama-mcp-src"
 PKG_DIR="${SRC_DIR}/packages/orama-mcp"
 
-echo "[orama-mcp] installing (ref=${REF}, globs=${GLOBS}, ocr=${OCR}, autoRegister=${AUTOREGISTER})"
+echo "[orama-mcp] installing (ref=${REF}, transport=${TRANSPORT}, port=${PORT}, globs=${GLOBS}, ocr=${OCR}, autoRegister=${AUTOREGISTER})"
 
 # 1. Ensure git is available (needed to fetch packages/orama-mcp's source; it isn't
 #    published to a registry yet).
@@ -76,8 +93,36 @@ exec bun run "${PKG_DIR}/dist/index.js" "\$@"
 EOF
 chmod +x /usr/local/bin/orama-mcp
 
-# 7. Helper (run by postCreateCommand, cwd = workspace folder by then) that merges
-#    the stdio server entry into the workspace .mcp.json, honoring AUTOREGISTER.
+# 7. Wrapper (run by postStartCommand, cwd = workspace folder by then) that starts
+#    the ONE shared streamable-HTTP MCP service for this container. A stdio MCP
+#    server *is* its pipe, so it is structurally one process per client session --
+#    each with its own copy of the index and of the embedding model (~557 MB RSS and
+#    ~4k inotify watches apiece, measured). Over HTTP every session is just a
+#    protocol shell over a single engine. Lifecycle commands are static strings with
+#    no access to this feature's options, so they are baked in here.
+cat > /usr/local/bin/orama-mcp-serve << EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${TRANSPORT}" != "http" ]; then
+  echo "[orama-mcp] transport=${TRANSPORT}: no shared service to start (MCP clients spawn orama-mcp over stdio)."
+  exit 0
+fi
+
+# --root defaults to the cwd, which the dev container spec sets to the workspace folder.
+exec orama-mcp \\
+  --transport http \\
+  --host 127.0.0.1 \\
+  --port ${PORT} \\
+  --globs "${GLOBS}" ${OCR_ARG} "\$@"
+EOF
+chmod +x /usr/local/bin/orama-mcp-serve
+
+# 8. Helper (run by postCreateCommand, cwd = workspace folder by then) that merges
+#    the server entry into the workspace .mcp.json, honoring AUTOREGISTER. The shape
+#    follows the transport: an http url clients connect to, or the command/args they
+#    spawn. Note this runs at CREATE time -- a container created before this feature
+#    version keeps whatever entry it already has until it is rebuilt.
 cat > /usr/local/bin/orama-mcp-register << EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -88,11 +133,19 @@ mcp_json="\${PWD}/.mcp.json"
 [ -f "\${mcp_json}" ] || echo '{}' > "\${mcp_json}"
 
 tmp="\$(mktemp)"
-jq --arg globs "${GLOBS}" --argjson ocr ${OCR} \
-  '.mcpServers.orama = {command: "orama-mcp", args: (["--globs", \$globs] + (if \$ocr then ["--ocr"] else [] end))}' \
-  "\${mcp_json}" > "\${tmp}"
+if [ "${TRANSPORT}" = "http" ]; then
+  jq --arg url "http://127.0.0.1:${PORT}/mcp" \\
+    '.mcpServers.orama = {type: "http", url: \$url}' \\
+    "\${mcp_json}" > "\${tmp}"
+  desc="http://127.0.0.1:${PORT}/mcp"
+else
+  jq --arg globs "${GLOBS}" --argjson ocr ${OCR} \\
+    '.mcpServers.orama = {command: "orama-mcp", args: (["--globs", \$globs] + (if \$ocr then ["--ocr"] else [] end))}' \\
+    "\${mcp_json}" > "\${tmp}"
+  desc="stdio"
+fi
 mv "\${tmp}" "\${mcp_json}"
-echo "[orama-mcp] registered orama server in \${mcp_json}"
+echo "[orama-mcp] registered orama server (\${desc}) in \${mcp_json}"
 EOF
 chmod +x /usr/local/bin/orama-mcp-register
 
