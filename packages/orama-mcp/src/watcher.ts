@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, type Stats } from "node:fs";
 import { relative } from "node:path";
 import { watch } from "chokidar";
 import picomatch from "picomatch";
@@ -11,7 +11,57 @@ import { createLimiter } from "./util/limit";
 import { createLogger } from "./util/log";
 
 const log = createLogger("watcher");
-const ALWAYS_IGNORED = /(^|\/)(node_modules|\.git)(\/|$)/;
+
+/**
+ * Directory names the watcher refuses to descend into, matched per path segment.
+ *
+ * Chokidar takes one inotify watch per directory it walks, so the glob filter
+ * below saves nothing on watch count — it only stops a file from being *indexed*
+ * once its directory is already watched. Every directory that cannot hold
+ * indexable content therefore has to be pruned here, or it costs a watch (and a
+ * recursive scan) for zero indexed files.
+ *
+ * Only directories whose contents are generated, vendored, or otherwise
+ * uninteresting belong here. Gitignored-but-authored trees (`.claude/` session
+ * transcripts, for one) are deliberately still watched.
+ */
+const PRUNED_DIR_NAMES = new Set([
+  // Vendored / package-manager stores.
+  "node_modules",
+  ".git",
+  ".pnpm-store",
+  // Build output — generated copies of sources that are already indexed.
+  "dist",
+  "build",
+  ".wrangler",
+  ".react-router",
+  // Tool scratch space.
+  ".playwright-mcp",
+]);
+
+/** True when any segment of the root-relative path `rel` is a pruned directory. */
+export function isPrunedPath(rel: string): boolean {
+  return rel.split("/").some((segment) => PRUNED_DIR_NAMES.has(segment));
+}
+
+/** Builds chokidar's `ignored` predicate: prune dead directories first, then keep
+ * only files matching one of `globs`. Exported for tests. */
+export function createIgnoreFilter(
+  root: string,
+  globs: string[],
+  cacheDirName: string,
+): (path: string, stats?: Stats) => boolean {
+  const matchers = globs.map((g) => picomatch(g));
+  return (path, stats) => {
+    const rel = relative(root, path);
+    if (rel === "") return false;
+    if (isPrunedPath(rel)) return true;
+    if (rel === cacheDirName || rel.startsWith(`${cacheDirName}/`)) return true;
+    if (stats?.isFile()) return !matchers.some((m) => m(rel));
+    return false;
+  };
+}
+
 /** PDF parsing (and OCR) is heavy; cap how many files are processed at once. */
 const MAX_CONCURRENT_INDEX = 4;
 
@@ -38,19 +88,10 @@ export function startWatcher(
   engine: KnowledgeEngine,
   opts: WatcherOptions,
 ): () => Promise<void> {
-  const matchers = globs.map((g) => picomatch(g));
   const limit = createLimiter(MAX_CONCURRENT_INDEX);
   const pdf: PdfOptions = { cacheDir: opts.cacheDir, ocr: opts.ocr };
 
-  const watcher = watch(root, {
-    ignored: (path, stats) => {
-      const rel = relative(root, path);
-      if (rel === "") return false;
-      if (ALWAYS_IGNORED.test(rel) || rel === opts.cacheDirName || rel.startsWith(`${opts.cacheDirName}/`)) return true;
-      if (stats?.isFile()) return !matchers.some((m) => m(rel));
-      return false;
-    },
-  });
+  const watcher = watch(root, { ignored: createIgnoreFilter(root, globs, opts.cacheDirName) });
 
   const handle = (absPath: string): void => {
     const relPath = relative(root, absPath);

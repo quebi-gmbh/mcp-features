@@ -128,8 +128,14 @@ doesn't reliably hoist it otherwise.
 A [chokidar](https://github.com/paulmillr/chokidar) watcher (chokidar itself dropped built-in glob
 support in v4+, so `--globs` matching is done here via `picomatch`) watches the whole workspace root
 and on `add`/`change` re-chunks and re-embeds just that file (replacing its prior chunks); on
-`unlink` it removes that file's chunks. `node_modules`, `.git`, and the cache directory itself are
-always excluded.
+`unlink` it removes that file's chunks.
+
+Because chokidar takes one inotify watch per directory it descends into, the `--globs` filter alone
+saves nothing on watch count — it only stops a matched-nothing file from being *indexed*. Directories
+that cannot hold indexable content are therefore pruned outright, by name, at any depth:
+`node_modules`, `.git`, `.pnpm-store`, `dist`, `build`, `.wrangler`, `.react-router` and
+`.playwright-mcp`, plus the cache directory itself. Gitignored-but-authored trees (`.claude/`, for
+one) are deliberately still watched.
 
 ## Develop
 
